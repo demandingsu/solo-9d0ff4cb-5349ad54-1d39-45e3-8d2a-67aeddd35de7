@@ -1,14 +1,18 @@
-# 截标时间核对工具
+# 截标时间核对工具 / 样品交接核对
 
-面向采购专员的网页工具：从公开招标公告站抓取公告，按项目串起公告链，
-自动应用更正与撤销，给出每个项目的**最终截标时间 / 停办状态**及**依据链接**。
+面向采购专员与评标秘书的网页工具，包含两个核对能力：
+
+1. **截标时间核对**：从公开招标公告站抓取公告，按项目串起公告链，自动应用更正与撤销，
+   给出每个项目的**最终截标时间 / 停办状态**及**依据链接**。
+2. **样品交接核对**：填写交接目录 URL、标段号、样品编号与核对时刻，沿同源分页抓取入库及
+   交接详情，从入库起按前序记录编号还原唯一交接链，判定样品**能否交付评审室**。
 
 仓库包含两个服务：
 
 | 服务 | 目录 | 说明 |
 | --- | --- | --- |
-| 核对工具 | `app/` | FastAPI 网页：输入列表网址 → 抓取同源分页与详情 → 分析展示，SQLite 保存采集轮次 |
-| 示例公告站 | `sample_site/` | FastAPI 模拟公告站：3 页列表分页 + 11 条公告详情（含更正、撤销），支持故障注入 |
+| 核对工具 | `app/` | FastAPI 网页：公告抓取分析（SQLite 保存采集轮次）+ 样品交接核对页 |
+| 示例公告站 | `sample_site/` | FastAPI 模拟站点：公告列表/详情（含更正、撤销）+ 交接目录/详情（完整链、破损链、分叉、缺前序、编号冲突），支持故障注入 |
 
 ## 快速开始（Docker Compose）
 
@@ -16,10 +20,30 @@
 docker compose up --build
 ```
 
-- 核对工具：http://localhost:8000/ （打开后点击 **开始抓取**，默认已填入示例站列表网址）
+- 核对工具：http://localhost:8000/ （首页点击 **开始抓取**，或进入 **投标样品交接核对**）
 - 示例公告站：http://localhost:8080/list.html?page=1
+- 交接目录：http://localhost:8080/transfer/list.html?page=1
+
+### 样品交接核对演示
+
+打开 http://localhost:8000/transfer ，交接目录 URL 已预填，按下表填写标段号 / 样品编号，
+核对时刻填 `2026-11-11 18:00`：
+
+| 标段号 | 样品编号 | 预期判定 | 场景 |
+| --- | --- | --- | --- |
+| `BD-2026-01` | `SP-01-001` | **可交** | 完整链：入库→暂存间→流转专员→评审室，封签全程完好（另有一条 11-12 的归档记录演示时刻过滤） |
+| `BD-2026-02` | `SP-02-002` | **不可交** | 封签途中登记破损，后续补签“完好”不得覆盖破损事实 |
+| `BD-2026-03` | `SP-03-003` | **不可交** | 封签完好但末笔接收方是暂存间，未送达评审室 |
+| `BD-2026-04` | `SP-04-004` | **待核实** | 同一前序有两条后继记录，交接链分叉 |
+| `BD-2026-05` | `SP-05-005` | **待核实** | 后继记录指向不存在的前序编号，缺前序 |
+| `BD-2026-06` | `SP-06-006` | **待核实** | 同一记录编号两条内容不一致的登记，编号冲突 |
+
+把核对时刻改为 `2026-11-11 09:00` 再核对 BD-2026-01，可看到评审室签收记录（09:20）尚未发生，
+结论变为**不可交（未到评审室）**，晚于时刻的记录列入“已排除记录”。
 
 ## 功能说明
+
+### 1. 截标时间核对
 
 1. **抓取**：输入与示例站同结构的列表网址，点击抓取。工具只跟随与起始网址
    **同源**的分页链接（`nav.pagination`）与详情链接（`ul.notice-list`），
@@ -37,13 +61,32 @@ docker compose up --build
    - **重抓不叠加**：公告只在整轮全部成功后于单事务内写入，失败轮次不留
      半截数据；页面始终只展示最近一次成功轮次的结果。
 
+### 2. 样品交接核对
+
+1. **抓取**：从交接目录 URL 出发，只跟随**同源**分页（`nav.pagination`）与详情链接
+   （`ul.transfer-list`），逐个读取详情页的：记录编号、标段号、样品编号、发生时间、
+   交出方（入库无）、接收方、封签编号、封签状态（`data-seal-status=intact|broken`）、
+   前序记录编号（入库无）。同一详情页包含多份登记时全部读取（编号冲突场景）。
+2. **截至时刻过滤**：只纳入发生时间不晚于核对时刻的记录，晚于时刻的记录单独列出。
+3. **还原唯一交接链**：以无前序编号的入库记录为唯一起点，按前序编号逐笔串联，并检查——
+   - 人员逐笔衔接：本笔交出方必须等于前笔接收方；
+   - 封签逐笔衔接：封签编号逐笔一致，且封签**曾登记“破损”不得被后续“完好”覆盖**；
+   - 结构异常：缺前序、分叉（同一前序多条后继）、成环、多条入库、编号冲突。
+4. **三档判定**：
+   - **可交**：唯一链完整、人员与封签逐笔衔接、全程完好，且末笔接收方为评审室；
+   - **不可交**：链可信但未送达评审室（末笔接收方不是评审室），或封签曾破损；
+   - **待核实**：相关页面抓取失败、无记录、缺前序、分叉、成环、编号冲突、
+     多条入库或人员/封签衔接不上；页面列出全部问题说明与**问题网址**。
+   交接核对为即查即看，不写数据库。
+
 ## 演示失败处理
 
 ```bash
-# 开启故障注入：详情页 NT-2026-0004 返回 500
+# 开启故障注入：公告详情 NT-2026-0004 与交接详情 TR-2026-0405 返回 500
 curl "http://localhost:8080/admin/fail?on=1"
-# 在 http://localhost:8000/ 点击“开始抓取” → 第 N 轮失败，报出该网址，结果仍是上一轮
-# 关闭故障后重抓 → 新一轮成功，数据整体替换，不叠加
+# 公告抓取：第 N 轮失败，报出该网址，结果仍是上一轮
+# 交接核对：任意相关详情页失败即判“待核实”，页面列出失败网址与原因
+# 关闭故障后重新操作即恢复
 curl "http://localhost:8080/admin/fail?on=0"
 ```
 
@@ -51,27 +94,35 @@ curl "http://localhost:8080/admin/fail?on=0"
 
 输入网址须与示例站同结构：
 
-- 列表页 `list.html?page=N`：公告链接在 `ul.notice-list a`，分页链接在 `nav.pagination a`；
-- 详情页 `detail/<公告编号>.html`：容器 `div.notice[data-notice-type]`
+- 公告列表页 `list.html?page=N`：公告链接在 `ul.notice-list a`，分页链接在 `nav.pagination a`；
+- 公告详情页 `detail/<公告编号>.html`：容器 `div.notice[data-notice-type]`
   （`tender`/`correction`/`cancellation`），字段元素
   `#project-no`、`#notice-no`、`#publish-time`、`#deadline`（如有）、
   `#target-notice`（更正/撤销必填）。
+- 交接目录页 `transfer/list.html?page=N`：记录链接在 `ul.transfer-list a`，分页链接在 `nav.pagination a`；
+- 交接详情页 `transfer/detail/<记录编号>.html`：容器 `div.transfer-record`（同页可多个），
+  字段元素 `#record-no`、`#section-no`、`#sample-no`、`#event-time`、
+  `#from-party`（入库无）、`#to-party`、`#seal-no`、
+  `#seal-status[data-seal-status]`（`intact`/`broken`）、`#prev-record`（入库无）。
 
 ## 配置（环境变量）
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `DB_PATH` | `/data/app.db`（容器） | SQLite 文件路径 |
-| `DEFAULT_START_URL` | `http://sample-site:8000/list.html?page=1` | 抓取表单预填的列表网址 |
+| `DB_PATH` | `/data/app.db`（容器） | SQLite 文件路径（仅公告核对使用） |
+| `DEFAULT_START_URL` | `http://sample-site:8000/list.html?page=1` | 公告抓取表单预填的列表网址 |
+| `DEFAULT_TRANSFER_URL` | `http://sample-site:8000/transfer/list.html?page=1` | 交接核对表单预填的目录网址 |
 | `URL_REWRITE_FROM` / `URL_REWRITE_TO` | 见 compose | 把结果页中的内部网址改写为浏览器可访问地址 |
 
 ## 本地开发与测试
 
 ```bash
 pip install -r app/requirements.txt -r sample_site/requirements.txt pytest
-python -m pytest tests/            # 单元测试：公告链分析 + 详情页解析
+python -m pytest tests/            # 单元测试：公告链、交接链分析 + 详情页解析（39 项）
 # 手动联调：
 cd sample_site && uvicorn main:app --port 8080 &
-cd app && DB_PATH=/tmp/app.db DEFAULT_START_URL=http://localhost:8080/list.html?page=1 \
+cd app && DB_PATH=/tmp/app.db \
+  DEFAULT_START_URL=http://localhost:8080/list.html?page=1 \
+  DEFAULT_TRANSFER_URL=http://localhost:8080/transfer/list.html?page=1 \
   uvicorn main:app --port 8000
 ```

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>样品交接目录 - 第 {{ page }} 页</title>
+  <style>
+    body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #333; }
+    h1 { border-bottom: 2px solid #2c5f8a; padding-bottom: .3em; }
+    ul.transfer-list { list-style: none; padding: 0; }
+    ul.transfer-list li { padding: .6em .2em; border-bottom: 1px solid #e0e0e0; }
+    ul.transfer-list a { color: #2c5f8a; text-decoration: none; }
+    ul.transfer-list a:hover { text-decoration: underline; }
+    .meta { color: #888; font-size: .9em; margin-left: 1em; }
+    .seal-broken { color: #b02a37; font-weight: bold; }
+    .seal-intact { color: #1e7e34; }
+    nav.pagination { margin: 1.2em 0; }
+    nav.pagination a, nav.pagination span.current { margin-right: .6em; padding: .2em .5em; }
+    nav.pagination span.current { background: #2c5f8a; color: #fff; border-radius: 3px; }
+    footer { color: #999; font-size: .85em; margin-top: 2em; border-top: 1px solid #eee; padding-top: .8em; }
+  </style>
+</head>
+<body>
+  <h1>投标样品交接记录目录</h1>
+  <ul class="transfer-list">
+    {% for r in items %}
+    <li>
+      <a href="/transfer/detail/{{ r.record_no }}.html">{{ r.record_no }}｜标段 {{ r.section_no }}｜样品 {{ r.sample_no }}</a>
+      <span class="meta">
+        {{ r.event_time }}
+        · {{ r.from_party or '（入库）' }} → {{ r.to_party }}
+        · 封签 {{ r.seal_no }} <span class="seal-{{ r.seal_status }}">{{ r.seal_label }}</span>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  <nav class="pagination">
+    {% for p in pages %}
+      {% if p == page %}<span class="current">{{ p }}</span>{% else %}<a href="/transfer/list.html?page={{ p }}">{{ p }}</a>{% endif %}
+    {% endfor %}
+    {% if page < total_pages %}<a href="/transfer/list.html?page={{ page + 1 }}" rel="next">下一页</a>{% endif %}
+  </nav>
+  <footer>
+    示例公告站 · <a href="/list.html?page=1">招标公告列表</a><br>
+    故障注入（{{ fail_transfer_record }} 返回 500）：
+    <a href="/admin/fail?on=1">开启</a> / <a href="/admin/fail?on=0">关闭</a>
+    （当前：{{ "开" if fail_on else "关" }}）
+  </footer>
+</body>
+</html>

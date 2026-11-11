@@ -10,6 +10,7 @@ services:
       DB_PATH: /data/app.db
       # 应用容器内部访问示例站的地址（默认抓取网址）
       DEFAULT_START_URL: http://sample-site:8000/list.html?page=1
+      DEFAULT_TRANSFER_URL: http://sample-site:8000/transfer/list.html?page=1
       # 把结果页中的内部网址改写成浏览器可访问的地址
       URL_REWRITE_FROM: http://sample-site:8000
       URL_REWRITE_TO: http://localhost:8080

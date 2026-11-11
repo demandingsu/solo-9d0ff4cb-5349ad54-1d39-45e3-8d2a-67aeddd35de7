@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>样品交接核对 - 评标秘书</title>
+  <style>
+    :root { --blue: #2c5f8a; --green: #1e7e34; --red: #b02a37; --amber: #b8860b; --gray: #6c757d; }
+    * { box-sizing: border-box; }
+    body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; max-width: 1120px; margin: 0 auto; padding: 1.5em 1em 3em; color: #2b2b2b; background: #fafbfc; }
+    h1 { color: var(--blue); margin-bottom: .2em; }
+    h2 { margin-top: 1.8em; border-left: 4px solid var(--blue); padding-left: .5em; font-size: 1.15em; }
+    .subtitle { color: var(--gray); margin-top: 0; }
+    .topnav a { color: var(--blue); text-decoration: none; font-size: .95em; }
+    form.check { display: grid; grid-template-columns: 11em 1fr; gap: .8em 1em; margin: 1.2em 0; background: #fff; border: 1px solid #dde3ea; border-radius: 8px; padding: 1.2em 1.4em; }
+    form.check label { align-self: center; color: #555; font-weight: bold; }
+    form.check input { padding: .55em .7em; border: 1px solid #c8d0d8; border-radius: 5px; font-size: 1em; width: 100%; }
+    form.check .actions { grid-column: 1 / -1; }
+    form.check button { padding: .6em 2.2em; background: var(--blue); color: #fff; border: 0; border-radius: 5px; font-size: 1em; cursor: pointer; }
+    form.check button:hover { background: #234c6d; }
+    .hint { color: var(--gray); font-size: .85em; margin: .2em 0 0; }
+    .banner { padding: .9em 1.1em; border-radius: 6px; margin: 1em 0; line-height: 1.7; }
+    .banner.ok { background: #e6f4ea; border: 1px solid #b7dfc2; color: var(--green); font-size: 1.15em; font-weight: bold; }
+    .banner.no { background: #fbe9eb; border: 1px solid #f1c2c8; color: var(--red); font-size: 1.15em; font-weight: bold; }
+    .banner.verify { background: #fff6e0; border: 1px solid #ecd9a0; color: #8a6100; font-size: 1.15em; font-weight: bold; }
+    .banner.err { background: #fbe9eb; border: 1px solid #f1c2c8; color: var(--red); }
+    .banner a, td a { color: var(--blue); word-break: break-all; }
+    table { border-collapse: collapse; width: 100%; background: #fff; }
+    th, td { border: 1px solid #e2e6ea; padding: .5em .65em; text-align: left; vertical-align: top; font-size: .94em; }
+    th { background: #f0f4f8; white-space: nowrap; }
+    tr.flag-bad td { background: #fdf0f1; }
+    .seal-broken { color: var(--red); font-weight: bold; }
+    .seal-intact { color: var(--green); }
+    .tag { display: inline-block; padding: .1em .6em; border-radius: 1em; font-size: .85em; color: #fff; }
+    .tag.person { background: var(--red); }
+    .tag.seal { background: #8a6100; }
+    ul.issues { margin: .4em 0; padding-left: 1.3em; line-height: 1.8; }
+    ul.issues li { word-break: break-all; }
+    .muted { color: var(--gray); font-size: .9em; }
+    .summary { display: flex; flex-wrap: wrap; gap: .6em 2em; background: #fff; border: 1px solid #dde3ea; border-radius: 8px; padding: 1em 1.4em; margin: 1em 0; }
+    .summary div { min-width: 12em; }
+    .summary .k { color: var(--gray); font-size: .85em; }
+    .summary .v { font-weight: bold; font-size: 1.05em; }
+    .empty { color: var(--gray); background: #fff; border: 1px dashed #c8d0d8; border-radius: 6px; padding: 1.2em; text-align: center; }
+    code { background: #eef1f4; padding: .1em .35em; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <p class="topnav"><a href="/">← 返回截标时间核对</a></p>
+  <h1>投标样品交接核对</h1>
+  <p class="subtitle">沿同源分页抓取入库及交接详情，只看不晚于核对时刻的记录，从入库起按前序编号还原唯一交接链；
+    人员与封签逐笔衔接、封签全程完好且末笔由评审室接收，才判定可交。</p>
+
+  <form class="check" method="post" action="/transfer/check">
+    <label for="catalog_url">交接目录 URL</label>
+    <div>
+      <input type="text" id="catalog_url" name="catalog_url" required
+             value="{{ form.catalog_url if form else default_transfer_url }}"
+             placeholder="http://sample-site:8000/transfer/list.html?page=1">
+      <p class="hint">只跟随与该网址同源的分页（nav.pagination）与详情链接（ul.transfer-list）。</p>
+    </div>
+    <label for="section_no">标段号</label>
+    <input type="text" id="section_no" name="section_no" required
+           value="{{ form.section_no if form else '' }}" placeholder="例如 BD-2026-01">
+    <label for="sample_no">样品编号</label>
+    <input type="text" id="sample_no" name="sample_no" required
+           value="{{ form.sample_no if form else '' }}" placeholder="例如 SP-01-001">
+    <label for="cutoff_time">核对时刻</label>
+    <div>
+      <input type="text" id="cutoff_time" name="cutoff_time" required
+             value="{{ form.cutoff_time if form else '' }}" placeholder="2026-11-11 18:00">
+      <p class="hint">格式 YYYY-MM-DD HH:MM；只纳入发生时间不晚于该时刻的记录。</p>
+    </div>
+    <div class="actions"><button type="submit">开始核对</button></div>
+  </form>
+
+  {% if scrape_error %}
+  <div class="banner err">{{ scrape_error }}</div>
+  {% endif %}
+
+  {% if result %}
+  <h2>核对结论</h2>
+  <div class="banner {{ 'ok' if result.verdict == '可交' else ('no' if result.verdict == '不可交' else 'verify') }}">
+    标段 {{ result.section_no }} ｜ 样品 {{ result.sample_no }} ｜ 核对时刻 {{ result.cutoff_time }}
+    —— 判定：{{ result.verdict }}
+  </div>
+
+  <div class="summary">
+    <div><div class="k">命中记录</div><div class="v">{{ result.total_matched }} 条</div></div>
+    <div><div class="k">截至时刻纳入</div><div class="v">{{ result.in_window_count }} 条</div></div>
+    <div><div class="k">晚于时刻排除</div><div class="v">{{ result.excluded|length }} 条</div></div>
+    <div><div class="k">抓取目录页 / 详情页</div><div class="v">{{ result.list_pages|length }} / {{ result.detail_pages|length }}</div></div>
+    <div><div class="k">抓取失败页</div><div class="v" style="color: {{ 'var(--red)' if result.failed_pages else 'inherit' }}">{{ result.failed_pages|length }} 个</div></div>
+    <div><div class="k">封签曾破损</div><div class="v" style="color: {{ 'var(--red)' if result.seal_ever_broken else 'inherit' }}">{{ '是' if result.seal_ever_broken else '否' }}</div></div>
+    <div><div class="k">末笔接收方为评审室</div><div class="v">{{ '是' if result.ends_at_review_room else '否' }}</div></div>
+  </div>
+
+  {% if result.issues %}
+  <h2>判定依据与待核实问题</h2>
+  <ul class="issues">
+    {% for msg in result.issues %}
+    <li>{{ msg }}</li>
+    {% endfor %}
+  </ul>
+  {% if result.problem_urls %}
+  <p class="muted">问题网址：
+    {% for url, message in result.problem_urls %}
+      <a href="{{ url|public_url }}" target="_blank" rel="noopener">{{ url|public_url }}</a>（{{ message }}）{% if not loop.last %}；{% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
+  {% endif %}
+
+  <h2>交接链（仅含不晚于核对时刻的记录）</h2>
+  {% if result.chain %}
+  {% if not result.chain_order_ok %}
+  <p class="muted">链结构存在异常，下表按发生时间列出全部纳入记录，不代表已还原出唯一交接链。</p>
+  {% endif %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>记录编号</th><th>发生时间</th><th>交出方</th><th>接收方</th>
+        <th>封签编号</th><th>封签状态</th><th>前序记录编号</th><th>来源</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in result.chain %}
+      <tr class="{{ 'flag-bad' if c.personnel_mismatch or c.seal_mismatch else '' }}">
+        <td>{{ loop.index }}</td>
+        <td><strong>{{ c.record_no }}</strong>
+          {% if c.personnel_mismatch %}<br><span class="tag person">人员衔接异常</span>{% endif %}
+          {% if c.seal_mismatch %}<br><span class="tag seal">封签衔接异常</span>{% endif %}
+        </td>
+        <td class="muted">{{ c.event_time }}</td>
+        <td>{{ c.from_party or '—（入库）' }}</td>
+        <td>{{ c.to_party }}</td>
+        <td>{{ c.seal_no }}</td>
+        <td class="seal-{{ c.seal_status }}">{{ c.seal_label }}</td>
+        <td>{{ c.prev_record or '—' }}</td>
+        <td><a href="{{ c.url|public_url }}" target="_blank" rel="noopener">详情</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">截至核对时刻没有可展示的交接记录。</div>
+  {% endif %}
+
+  {% if result.excluded %}
+  <h2>晚于核对时刻、已排除的记录</h2>
+  <table>
+    <thead>
+      <tr><th>记录编号</th><th>发生时间</th><th>交出方</th><th>接收方</th><th>封签状态</th><th>前序记录编号</th><th>来源</th></tr>
+    </thead>
+    <tbody>
+      {% for c in result.excluded %}
+      <tr>
+        <td>{{ c.record_no }}</td>
+        <td class="muted">{{ c.event_time }}</td>
+        <td>{{ c.from_party or '—（入库）' }}</td>
+        <td>{{ c.to_party }}</td>
+        <td class="seal-{{ c.seal_status }}">{{ c.seal_label }}</td>
+        <td>{{ c.prev_record or '—' }}</td>
+        <td><a href="{{ c.url|public_url }}" target="_blank" rel="noopener">详情</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if result.failed_pages %}
+  <h2>抓取失败的相关页面</h2>
+  <table>
+    <thead><tr><th>问题网址</th><th>原因</th></tr></thead>
+    <tbody>
+      {% for f in result.failed_pages %}
+      <tr>
+        <td><a href="{{ f.url|public_url }}" target="_blank" rel="noopener">{{ f.url|public_url }}</a></td>
+        <td class="muted">{{ f.message }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% endif %}
+</body>
+</html>

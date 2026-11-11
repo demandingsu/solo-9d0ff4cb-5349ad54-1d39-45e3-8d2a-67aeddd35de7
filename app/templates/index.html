@@ -42,6 +42,7 @@
 <body>
   <h1>截标时间核对工具</h1>
   <p class="subtitle">输入与示例公告站同结构的列表网址，抓取同源分页与详情页，按项目串起公告链，核对真实截标时间。</p>
+  <p class="subtitle">📦 <a href="/transfer" style="color: var(--blue);">投标样品交接核对</a>：沿交接目录还原唯一交接链，判定样品能否交付评审室。</p>
 
   <form class="scrape" method="post" action="/scrape">
     <input type="text" name="start_url" value="{{ default_start_url }}" placeholder="http://sample-site:8000/list.html" required>

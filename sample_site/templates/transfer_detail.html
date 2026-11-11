@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>交接记录 {{ record_no }}</title>
+  <style>
+    body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; color: #333; }
+    h1 { color: #2c5f8a; }
+    div.transfer-record { background: #f7f9fb; border: 1px solid #dde3ea; border-radius: 6px; padding: 1em 1.2em; margin-bottom: 1.2em; }
+    dl.transfer-fields { display: grid; grid-template-columns: 9em 1fr; gap: .4em 1em; margin: .6em 0; }
+    dl.transfer-fields dt { font-weight: bold; color: #555; }
+    dl.transfer-fields dd { margin: 0; }
+    .conflict-tip { background: #fbe9eb; border: 1px solid #f1c2c8; color: #b02a37; padding: .7em 1em; border-radius: 6px; }
+    .seal-broken { color: #b02a37; font-weight: bold; }
+    .seal-intact { color: #1e7e34; }
+    .note { line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <h1>样品交接记录详情：{{ record_no }}</h1>
+  {% if conflict %}
+  <p class="conflict-tip">注意：该记录编号存在多条内容不一致的登记（编号冲突），请核实后再作核对结论。</p>
+  {% endif %}
+  {% for r in records %}
+  <div class="transfer-record">
+    <h2>标段 {{ r.section_no }} ｜ 样品 {{ r.sample_no }}</h2>
+    <dl class="transfer-fields">
+      <dt>记录编号</dt><dd id="record-no">{{ r.record_no }}</dd>
+      <dt>标段号</dt><dd id="section-no">{{ r.section_no }}</dd>
+      <dt>样品编号</dt><dd id="sample-no">{{ r.sample_no }}</dd>
+      <dt>发生时间</dt><dd id="event-time">{{ r.event_time }}</dd>
+      {% if r.from_party %}<dt>交出方</dt><dd id="from-party">{{ r.from_party }}</dd>{% endif %}
+      <dt>接收方</dt><dd id="to-party">{{ r.to_party }}</dd>
+      <dt>封签编号</dt><dd id="seal-no">{{ r.seal_no }}</dd>
+      <dt>封签状态</dt><dd id="seal-status" data-seal-status="{{ r.seal_status }}"><span class="seal-{{ r.seal_status }}">{{ r.seal_label }}</span></dd>
+      {% if r.prev_record %}<dt>前序记录编号</dt><dd id="prev-record"><a href="/transfer/detail/{{ r.prev_record }}.html">{{ r.prev_record }}</a></dd>{% endif %}
+    </dl>
+    <p class="note">交接说明：{{ r.note }}</p>
+  </div>
+  {% endfor %}
+  <p><a href="/transfer/list.html?page=1">返回交接目录</a></p>
+</body>
+</html>

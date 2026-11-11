@@ -1,7 +1,10 @@
-"""截标时间核对工具（FastAPI 网页）。
+"""评标秘书核对工具（FastAPI 网页）。
 
-用法：输入与示例公告站同结构的列表网址，点击“开始抓取”，系统抓取同源
-分页与全部详情页，按项目串起公告链，给出每个项目的最终截标时间与状态。
+两个核对能力：
+- 截标时间核对（/）：输入公告列表网址，抓取同源分页与全部详情页，按项目串起
+  公告链，给出每个项目的最终截标时间与状态，采集轮次存入 SQLite。
+- 样品交接核对（/transfer）：输入交接目录网址、标段号、样品编号与核对时刻，
+  抓取同源入库/交接详情，按前序编号还原唯一交接链，判定样品能否交付评审室。
 """
 
 import os
@@ -15,8 +18,13 @@ from fastapi.templating import Jinja2Templates
 import analysis
 import db
 import scraper
+import transfer_analysis
+import transfer_scraper
 
 DEFAULT_START_URL = os.environ.get("DEFAULT_START_URL", "http://sample-site:8000/list.html?page=1")
+DEFAULT_TRANSFER_URL = os.environ.get(
+    "DEFAULT_TRANSFER_URL", "http://sample-site:8000/transfer/list.html?page=1"
+)
 # 展示层网址改写：容器内部地址 → 浏览器可访问地址（可选）
 URL_REWRITE_FROM = os.environ.get("URL_REWRITE_FROM", "")
 URL_REWRITE_TO = os.environ.get("URL_REWRITE_TO", "")
@@ -86,3 +94,74 @@ def do_scrape(start_url: str = Form(...)):
         f"{len(result.detail_pages)} 个详情页，共 {len(result.announcements)} 条公告。"
     )
     return RedirectResponse(f"/?msg={quote(msg)}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# 投标样品交接核对
+# ---------------------------------------------------------------------------
+
+
+@app.get("/transfer", response_class=HTMLResponse)
+def transfer_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "transfer.html",
+        {
+            "default_transfer_url": DEFAULT_TRANSFER_URL,
+            "form": None,
+            "result": None,
+            "scrape_error": None,
+        },
+    )
+
+
+@app.post("/transfer/check", response_class=HTMLResponse)
+def transfer_check(
+    request: Request,
+    catalog_url: str = Form(...),
+    section_no: str = Form(...),
+    sample_no: str = Form(...),
+    cutoff_time: str = Form(...),
+):
+    form = {
+        "catalog_url": catalog_url.strip(),
+        "section_no": section_no.strip(),
+        "sample_no": sample_no.strip(),
+        "cutoff_time": cutoff_time.strip(),
+    }
+    base_ctx = {"default_transfer_url": DEFAULT_TRANSFER_URL, "form": form, "result": None}
+
+    try:
+        transfer_analysis.parse_cutoff(form["cutoff_time"])
+    except transfer_analysis.CutoffTimeError as exc:
+        return templates.TemplateResponse(
+            request,
+            "transfer.html",
+            {**base_ctx, "scrape_error": str(exc)},
+        )
+
+    try:
+        scraped = transfer_scraper.scrape_transfer(form["catalog_url"])
+    except transfer_scraper.ScrapeError as exc:
+        # 目录页本身抓取失败：整次核对无法进行，列出问题网址
+        return templates.TemplateResponse(
+            request,
+            "transfer.html",
+            {**base_ctx, "scrape_error": f"交接目录抓取失败：{exc.url}（{exc.message}）"},
+        )
+
+    result = transfer_analysis.analyze_transfer(
+        scraped.records,
+        scraped.failed_pages,
+        form["section_no"],
+        form["sample_no"],
+        form["cutoff_time"],
+    )
+    result["list_pages"] = scraped.list_pages
+    result["detail_pages"] = scraped.detail_pages
+    result["failed_pages"] = [{"url": f.url, "message": f.message} for f in scraped.failed_pages]
+    return templates.TemplateResponse(
+        request,
+        "transfer.html",
+        {**base_ctx, "result": result, "scrape_error": None},
+    )

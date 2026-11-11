@@ -34,7 +34,8 @@
     {% if page < total_pages %}<a href="/list.html?page={{ page + 1 }}" rel="next">下一页</a>{% endif %}
   </nav>
   <footer>
-    示例公告站 · 故障注入（{{ fail_notice }} 返回 500）：
+    示例公告站 · <a href="/transfer/list.html?page=1">投标样品交接记录目录</a><br>
+    故障注入（{{ fail_notice }} 返回 500）：
     <a href="/admin/fail?on=1">开启</a> / <a href="/admin/fail?on=0">关闭</a>
     （当前：{{ "开" if fail_on else "关" }}）
   </footer>
